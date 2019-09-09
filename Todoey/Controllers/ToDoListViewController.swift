@@ -8,8 +8,9 @@
 
 import UIKit
 import RealmSwift
+import ChameleonFramework
 
-class ToDoListViewController: UITableViewController {
+class ToDoListViewController: SwipeTableViewController {
     
     var todoItems : Results<Item>?
     let realm = try! Realm()
@@ -24,22 +25,47 @@ class ToDoListViewController: UITableViewController {
     }
     
     
+    @IBOutlet weak var searchBar: UISearchBar!
+    
+    
     override func viewDidLoad() {
         super.viewDidLoad()
         // Do any additional setup after loading the view.
         
-        print(FileManager.default.urls(for: .documentDirectory, in: .userDomainMask))
-        
         loadItems()
-        
-        
-        //                if let items = defaults.array(forKey: "TodoListArray") as? [Item] {
-        //
-        //                    itemArray = items
-        //                }
+        tableView.separatorStyle = .none
         
     }
     
+    override func viewWillAppear(_ animated: Bool) {
+        title = selectedCategory?.name
+        
+           guard let colorHex = selectedCategory?.color else {fatalError()}
+        
+        updateNavBar(withHexcode: colorHex)
+        
+    }
+    
+    override func viewWillDisappear(_ animated: Bool) {
+        updateNavBar(withHexcode: "1D9BF6")
+    }
+    
+    //MARK: - Nav Bar setup methods
+    
+    func updateNavBar (withHexcode colorHexcode: String ) {
+        guard let navBar = navigationController?.navigationBar else { fatalError("Navigation Controller does not exist")  }
+        
+        
+        guard let navBarcolor = UIColor(hexString: colorHexcode) else { fatalError()}
+        
+        navBar.barTintColor = navBarcolor
+        
+        navBar.tintColor = ContrastColorOf(navBarcolor, returnFlat: true)
+        navBar.largeTitleTextAttributes = [NSAttributedString.Key.foregroundColor: ContrastColorOf(navBarcolor, returnFlat: true)]
+        
+        searchBar.barTintColor = navBarcolor
+        
+    }
     
     // MARK - Tableview Datasource Method
     
@@ -50,11 +76,16 @@ class ToDoListViewController: UITableViewController {
     
     override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         
-        let cell = tableView.dequeueReusableCell(withIdentifier: "toDoItemCell", for: indexPath)
+        let cell = super.tableView(tableView, cellForRowAt: indexPath)
         
         if let item = todoItems?[indexPath.row] {
             
             cell.textLabel?.text = item.title
+            
+            if let color = UIColor(hexString: selectedCategory!.color)?.darken(byPercentage: CGFloat(indexPath.row)/CGFloat(todoItems!.count)) {
+                cell.backgroundColor = color
+                cell.textLabel?.textColor = ContrastColorOf(color, returnFlat: true)
+            }
             
             // Ternary operator ->
             // value = condition ? valueIfTrue : valueIfFalse
@@ -79,8 +110,8 @@ class ToDoListViewController: UITableViewController {
                     item.done = !item.done
                 }
             } catch {
-                    print ("error saving done status \(error)")
-                }
+                print ("error saving done status \(error)")
+            }
         }
         
         tableView.reloadData()
@@ -136,27 +167,42 @@ class ToDoListViewController: UITableViewController {
         
     }
     
-    
+
+//MARK: - Delete Data from Swipe
+
+override func updateModel(at indexPath: IndexPath) {
+    if let itemForDeletion = todoItems?[indexPath.row] {
+        do {
+            try self.realm.write {
+                
+                self.realm.delete(itemForDeletion)
+            }
+        } catch {
+            print("Error deleting item \(error)")
+        }
+    }
 }
+}
+
 
 //MARK: Search bar method
 
 extension ToDoListViewController : UISearchBarDelegate {
-
+    
     func searchBarSearchButtonClicked(_ searchBar: UISearchBar) {
         
         todoItems = todoItems?.filter("title CONTAINS[cd] %@", searchBar.text!).sorted(byKeyPath: "dateCreated", ascending: true)
         tableView.reloadData()
     }
-
+    
     func searchBar(_ searchBar: UISearchBar, textDidChange searchText: String) {
         if searchBar.text?.count == 0 {
             loadItems()
-
+            
             DispatchQueue.main.async {
                 searchBar.resignFirstResponder()
             }
-
+            
         }
     }
 }
